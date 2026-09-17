@@ -167,6 +167,22 @@ nav button[aria-current="page"] svg{stroke-width:2.2}
 }
 @media(min-width:560px){ .stats{grid-template-columns:repeat(4,1fr)} }
 
+/* ===== شريط ديون اليوم ===== */
+.daybar{background:var(--ink);color:#EDF2EA;border-radius:var(--r);padding:15px 16px;margin-bottom:12px}
+.daybar .cap{font-size:13px;font-weight:600;color:#A7BCA9}
+.daybar .big{font-size:38px;font-weight:700;letter-spacing:-1.5px;line-height:1.1;margin:3px 0 2px;
+  font-variant-numeric:tabular-nums}
+.daybar .big.due{color:#FF9B85}
+.daybar .big.credit{color:#8FD0E8}
+.daybar .big.zero{color:#9BD3A4}
+.daybar .meta{font-size:13px;color:#A7BCA9;font-variant-numeric:tabular-nums}
+.daybar .split{display:flex;gap:9px;margin-top:12px}
+.daybar .split div{flex:1;background:rgba(255,255,255,.09);border-radius:10px;padding:9px 11px}
+.daybar .split .t{font-size:12px;color:#A7BCA9}
+.daybar .split .n{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px}
+.daybar .split .veg{color:#9BD3A4}
+.daybar .split .fruit{color:#F4A6B4}
+
 /* ===== شاشة القفل ===== */
 #lock{position:fixed;inset:0;z-index:100;background:var(--ink);color:#EDF2EA;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
@@ -205,6 +221,7 @@ nav button[aria-current="page"] svg{stroke-width:2.2}
 <!-- ============ تسجيل ============ -->
 <section id="v-entry">
   <div id="autoCard"></div>
+  <div id="todayBar"></div>
   <div class="card">
     <h2>شحنة جديدة</h2>
 
@@ -653,7 +670,28 @@ function agg(list){
   return a;
 }
 
-/* ================= الملخص اللحظي ================= */
+/* ================= شريط ديون اليوم ================= */
+function renderTodayBar(){
+  const t=todayISO();
+  const day=records.filter(r=>r.date===t);
+  const box=$("todayBar");
+  if(!day.length){ box.innerHTML=""; return; }
+  const a=agg(day);
+  const v=agg(day.filter(r=>r.kind==="خضار")), f=agg(day.filter(r=>r.kind==="فاكهة"));
+  const cls = Math.abs(a.rest)<0.005 ? "zero" : (a.rest>0 ? "due" : "credit");
+  const word = Math.abs(a.rest)<0.005 ? "كل شحنات اليوم اتسدّدت"
+    : (a.rest>0 ? "مستحق لك لحد دلوقتي" : "مقبوض زيادة لحد دلوقتي");
+  box.innerHTML=`<div class="daybar">
+    <div class="cap">إجمالي ديون اليوم</div>
+    <div class="big ${cls}">${money(a.rest)}</div>
+    <div class="meta">${word} · ${digits(a.count)} شحنة · مسدّدة ${digits(a.settled)}</div>
+    <div class="meta" style="margin-top:4px">قيمة اليوم ${money(a.total)} · المحصّل ${money(a.paid)}</div>
+    <div class="split">
+      <div><div class="t veg">خضار · ${digits(v.count)} شحنة</div><div class="n">${money(v.rest)}</div></div>
+      <div><div class="t fruit">فاكهة · ${digits(f.count)} شحنة</div><div class="n">${money(f.rest)}</div></div>
+    </div>
+  </div>`;
+}
 function renderInstant(){
   const d=$("instDate").value || todayISO();
   $("instDateLbl").textContent=prettyDate(d);
@@ -830,12 +868,12 @@ $("exportBtn").addEventListener("click",()=>{
   const head="التاريخ,النوع,الجهة,الإجمالي,المدفوع,الباقي,ملاحظة";
   const body=list.map(r=>[r.date,r.kind,r.place,r.total,r.paid,
     Math.round((r.total-r.paid)*100)/100,'"'+(r.note||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
-  download("تقرير-الشحنات.csv",head+"\n"+body,"text/csv;charset=utf-8");
+  download("مزرعة-تقرير-"+todayISO()+".csv",head+"\n"+body,"text/csv;charset=utf-8");
   toast("اتنزّل الملف");
 });
 function doBackup(){
   if(!records.length){ toast("مفيش بيانات"); return; }
-  download("نسخة-دفتر-المزرعة-"+todayISO()+".json",JSON.stringify(records,null,1),"application/json");
+  download("مزرعة-نسخة-"+todayISO()+".json",JSON.stringify(records,null,1),"application/json");
   toast("اتنزّلت النسخة");
 }
 $("backupBtn").addEventListener("click",doBackup);
@@ -885,8 +923,8 @@ function csvForDays(days){
 function saveDays(days,{silent=false}={}){
   const csv=csvForDays(days);
   if(!csv.trim()) return false;
-  const name = days.length===1 ? "شحنات-"+days[0]+".csv"
-    : "شحنات-"+days[0]+"-الى-"+days[days.length-1]+".csv";
+  const name = days.length===1 ? "مزرعة-جدول-"+days[0]+".csv"
+    : "مزرعة-جداول-"+days[0]+"-الى-"+days[days.length-1]+".csv";
   download(name,csv,"text/csv;charset=utf-8");
   const done=exportedDays();
   days.forEach(d=>{ if(!done.includes(d)) done.push(d); });
@@ -1104,6 +1142,7 @@ function renderAll(){
   $("todayLabel").textContent=prettyDate(todayISO());
   const today=records.filter(r=>r.date===todayISO()).sort((a,b)=>a.ts-b.ts);
   $("todayTable").innerHTML=rowsTable(today);
+  renderTodayBar();
   renderLog(); renderInstant(); renderDebt(); renderRange(); renderSummary(); renderAuto(); renderPin();
 }
 
