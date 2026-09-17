@@ -530,45 +530,90 @@ $("saveBtn").addEventListener("click",async()=>{
 });
 
 /* ================= تحصيل / حذف ================= */
-document.addEventListener("click",async e=>{
-  const c=e.target.closest("[data-collect]");
-  if(c){ openCollect(c.dataset.collect); return; }
-  const d=e.target.closest("[data-del]");
-  if(d){
-    const r=records.find(x=>x.id===d.dataset.del);
-    if(r && confirm("تمسح شحنة "+r.kind+" — "+r.place+" بمبلغ "+money(r.total)+"؟")){
-      records=records.filter(x=>x.id!==r.id);
-      await save(); renderAll(); toast("اتمسحت");
-    }
-  }
+document.addEventListener("click",e=>{
+  const row=e.target.closest("[data-edit]");
+  if(row) openEdit(row.dataset.edit);
 });
 
-function openCollect(id){
+function openEdit(id){
   const r=records.find(x=>x.id===id); if(!r) return;
-  const due=r.total-r.paid;
+  let k=r.kind, p=r.place;
   const s=document.createElement("div"); s.className="sheet";
-  s.innerHTML=`<div class="sheet-in">
-    <h3>تحصيل دفعة</h3>
-    <p class="sub">${esc(r.kind)} — ${esc(r.place)} — شحنة ${shortDate(r.date)} · المتبقي ${money(due)}</p>
-    <div class="field"><label for="cAmt">المبلغ المحصّل</label>
-      <input id="cAmt" type="text" inputmode="decimal" placeholder="${toWestern(String(Math.round(due*100)/100))}"></div>
-    <div class="row2">
-      <button class="primary" id="cOk">أضف الدفعة</button>
-      <button class="ghost" id="cAll">حصّلت المتبقي كله</button>
+  s.innerHTML=`<div class="sheet-in" style="max-height:88vh;overflow-y:auto">
+    <h3>تعديل الشحنة</h3>
+    <p class="sub">${prettyDate(r.date)}</p>
+
+    <div class="seg kind" id="eK" style="margin-bottom:9px">
+      <button data-v="خضار" aria-pressed="${k==="خضار"}"><span class="dot"></span>خضار</button>
+      <button data-v="فاكهة" aria-pressed="${k==="فاكهة"}"><span class="dot"></span>فاكهة</button>
     </div>
-    <button class="ghost" id="cNo" style="width:100%;margin-top:9px">إلغاء</button>
+    <div class="seg place" id="eP">
+      <button data-v="المنصورة" aria-pressed="${p==="المنصورة"}">المنصورة</button>
+      <button data-v="القاهرة" aria-pressed="${p==="القاهرة"}">القاهرة</button>
+    </div>
+
+    <div class="row2">
+      <div class="field"><label for="xT">الإجمالي</label>
+        <input id="xT" type="text" inputmode="decimal" value="${r.total}"></div>
+      <div class="field"><label for="xP">المدفوع</label>
+        <input id="xP" type="text" inputmode="decimal" value="${r.paid}"></div>
+    </div>
+    <div class="balance" style="border-top:1px solid var(--line);margin-bottom:10px">
+      <span class="lbl">الباقي</span><span class="val" id="xR"></span>
+    </div>
+
+    <div class="row2">
+      <div class="field"><label for="xD">التاريخ</label>
+        <input id="xD" type="date" value="${r.date}"></div>
+      <div class="field"><label for="xN">ملاحظة</label>
+        <input id="xN" type="text" value="${esc(r.note||"")}"></div>
+    </div>
+
+    <button class="ghost" id="xFull" style="width:100%;margin-bottom:9px">سدّد الباقي بالكامل</button>
+    <button class="primary" id="xOk">احفظ التعديل</button>
+    <div class="row2" style="margin-top:9px">
+      <button class="ghost" id="xNo">إلغاء</button>
+      <button class="ghost" id="xDel" style="color:var(--due);border-color:#EBC9C3">احذف الشحنة</button>
+    </div>
   </div>`;
   document.body.appendChild(s);
   const close=()=>s.remove();
+  const q=x=>s.querySelector(x);
   s.addEventListener("click",ev=>{ if(ev.target===s) close(); });
-  s.querySelector("#cNo").onclick=close;
-  s.querySelector("#cAll").onclick=async()=>{ r.paid=r.total; await save(); close(); renderAll(); toast("الشحنة اتسدّدت بالكامل"); };
-  s.querySelector("#cOk").onclick=async()=>{
-    const a=parseNum(s.querySelector("#cAmt").value);
-    if(a===null){ toast("اكتب المبلغ"); return; }
-    r.paid+=a; await save(); close(); renderAll(); toast("اتضافت دفعة "+money(a));
+
+  function drawRest(){
+    const t=parseNum(q("#xT").value)||0, pd=parseNum(q("#xP").value)||0;
+    q("#xR").innerHTML=signed(t-pd);
+  }
+  drawRest();
+  q("#xT").addEventListener("input",drawRest);
+  q("#xP").addEventListener("input",drawRest);
+
+  q("#eK").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    k=b.dataset.v; q("#eK").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  });
+  q("#eP").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    p=b.dataset.v; q("#eP").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  });
+
+  q("#xFull").onclick=()=>{ q("#xP").value=toWestern(q("#xT").value); drawRest(); };
+  q("#xNo").onclick=close;
+
+  q("#xDel").onclick=async()=>{
+    if(!confirm("تمسح شحنة "+r.kind+" — "+r.place+" بمبلغ "+money(r.total)+"؟")) return;
+    records=records.filter(x=>x.id!==r.id);
+    await save(); close(); renderAll(); toast("اتمسحت");
   };
-  s.querySelector("#cAmt").focus();
+
+  q("#xOk").onclick=async()=>{
+    const t=parseNum(q("#xT").value);
+    if(t===null){ toast("اكتب المبلغ الإجمالي"); return; }
+    r.kind=k; r.place=p; r.total=t;
+    r.paid=parseNum(q("#xP").value) ?? 0;
+    r.date=q("#xD").value || r.date;
+    r.note=q("#xN").value.trim();
+    await save(); close(); renderAll(); toast("اتعدّلت");
+  };
 }
 
 /* ================= جداول ================= */
@@ -577,7 +622,7 @@ function rowsTable(list,{showDate=false,actions=true}={}){
   let T=0,P=0;
   const body=list.map(r=>{
     T+=r.total; P+=r.paid;
-    return `<tr>
+    return `<tr ${actions?`data-edit="${r.id}" style="cursor:pointer"`:""}>
       ${showDate?`<td class="num">${shortDate(r.date)}</td>`:""}
       <td><span class="tag ${r.kind==="خضار"?"veg":"fruit"}">${esc(r.kind)}</span></td>
       <td>${esc(r.place)}</td>
@@ -585,21 +630,20 @@ function rowsTable(list,{showDate=false,actions=true}={}){
       <td class="money">${money(r.paid)}</td>
       <td>${restCell(r)}</td>
       <td>${esc(r.note||"—")}</td>
-      ${actions?`<td><button class="rowbtn" data-collect="${r.id}">تحصيل</button>
-        <button class="rowbtn del" data-del="${r.id}">حذف</button></td>`:""}
     </tr>`;
   }).join("");
   const cols = (showDate?1:0)+2;
-  return `<div class="tw"><table>
+  return `${actions?'<p class="hint" style="margin:0 0 8px">دوس على أي شحنة تعدّلها أو تمسحها.</p>':""}
+  <div class="tw"><table style="min-width:430px">
     <thead><tr>
       ${showDate?"<th>التاريخ</th>":""}<th>النوع</th><th>الجهة</th>
-      <th>الإجمالي</th><th>المدفوع</th><th>الباقي</th><th>ملاحظة</th>${actions?"<th></th>":""}
+      <th>الإجمالي</th><th>المدفوع</th><th>الباقي</th><th>ملاحظة</th>
     </tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr>
       <td colspan="${cols}">الإجمالي (${digits(list.length)} شحنة)</td>
       <td class="money">${money(T)}</td><td class="money">${money(P)}</td>
-      <td>${signed(T-P)}</td><td></td>${actions?"<td></td>":""}
+      <td>${signed(T-P)}</td><td></td>
     </tr></tfoot></table></div>`;
 }
 
