@@ -250,7 +250,7 @@ nav button[aria-current="page"] svg{stroke-width:2.2}
         <input id="eRest" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
       </div>
     </div>
-    <p class="hint" id="restHint">اكتب المدفوع أو الباقي — التاني بيتحسب لوحده. الباقي بالسالب معناه إنك مدين للتاجر.</p>
+    <p class="hint" id="restHint">اكتب المدفوع أو الباقي — التاني بيتحسب لوحده. الكسر بالنقطة أو بالفاصلة (٢.٥ أو ٢,٥). الباقي بالسالب معناه إنك مدين للتاجر.</p>
 
     <div class="row2">
       <div class="field">
@@ -418,9 +418,19 @@ async function save(){
 
 /* ================= أدوات ================= */
 const AR="٠١٢٣٤٥٦٧٨٩", FA="۰۱۲۳۴۵۶۷۸۹";
+const DEC = ".";   // علامة الكسر العشري في العرض
+
+/* قراءة أي رقم يكتبه المستخدم:
+   - الأرقام العربية والفارسية تتحوّل لأرقام عادية
+   - الفاصلة (, ، ٫) تتعامل كعلامة عشرية — كيبورد ألماني أو عربي
+   - فاصل الآلاف (٬) والمسافات يتشالوا */
 function toWestern(s){
-  return String(s||"").replace(/[٠-٩]/g,d=>AR.indexOf(d)).replace(/[۰-۹]/g,d=>FA.indexOf(d))
-    .replace(/[٫،]/g,".").replace(/[٬,]/g,"").trim();
+  return String(s||"")
+    .replace(/[٠-٩]/g,d=>AR.indexOf(d))
+    .replace(/[۰-۹]/g,d=>FA.indexOf(d))
+    .replace(/[٬\s]/g,"")
+    .replace(/[,،٫]/g,".")
+    .trim();
 }
 function parseNum(s){
   const v = toWestern(s).replace(/[^\d.\-]/g,"");
@@ -432,10 +442,12 @@ function digits(str){
   if(!settings.arabicDigits) return str;
   return String(str).replace(/\d/g,d=>AR[+d]);
 }
+/* عرض الأرقام: من غير فاصل آلاف خالص، والكسر بالنقطة */
 function fmt(n){
-  const v = Math.round((n+Number.EPSILON)*100)/100;
-  let s = v.toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:2});
-  return digits(s);
+  let v = Math.round((Number(n)+Number.EPSILON)*100)/100;
+  if(!isFinite(v)) return digits("0");
+  if(v===0) v = 0;                       // يشيل السالب من -0
+  return digits(String(v).replace(".",DEC));
 }
 function money(n){ return fmt(n); }
 const pad=n=>String(n).padStart(2,"0");
@@ -780,6 +792,7 @@ function renderRange(){
   if(!list.length){ $("rangeOut").innerHTML='<div class="empty"><b>مفيش نتائج للفترة دي</b>غيّر التواريخ أو الفلاتر.</div>'; return; }
   const a=agg(list);
   const daysCount=new Set(list.map(r=>r.date)).size;
+  const avg=Math.round((a.count/daysCount)*10)/10;
   const byKind=["خضار","فاكهة"].map(k=>({k,a:agg(list.filter(r=>r.kind===k))}));
   $("rangeOut").innerHTML=`
     <div class="stats" style="margin-bottom:12px">
@@ -787,7 +800,7 @@ function renderRange(){
         <div class="k">${x.k}</div><div class="v num">${digits(x.a.count)}</div>
         <div class="m num">مسدّدة ${digits(x.a.settled)} · دين ${money(x.a.rest)}</div></div>`).join("")}
       <div class="stat"><div class="k">أيام عمل</div><div class="v num">${digits(daysCount)}</div>
-        <div class="m num">متوسط ${digits((a.count/daysCount).toFixed(1))} شحنة/يوم</div></div>
+        <div class="m num">متوسط ${fmt(avg)} شحنة/يوم</div></div>
       <div class="stat"><div class="k">صافي الدين</div><div class="v num">${money(a.rest)}</div>
         <div class="m num">من إجمالي ${money(a.total)}</div></div>
     </div>
